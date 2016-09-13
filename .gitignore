@@ -21,3 +21,4 @@
 *.part
 .DS_Store
 .project
+tmp
