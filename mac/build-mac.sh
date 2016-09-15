@@ -47,14 +47,15 @@ TMPDIR=$SCRIPTDIR/tmp
 QMAKE=$(find $HOME/[Qq]* -type f -perm +0100 -name qmake 2>/dev/null | sort | tail -1)
 [[ -z "$QMAKE" ]] && error "no Qt installation found in $HOME"
 QTBINDIR=$(dirname "$QMAKE")
+QTDIR=$(cd "$QTBINDIR/.."; pwd)
 
 # Liguist is bundled in same directory as qmake.
 LINGDIR="$QTBINDIR/Linguist.app"
 [[ -x "$LINGDIR/Contents/MacOS/Linguist" ]] || error "Linguist not found in $LINGDIR"
 
 # Get Qt version from the Qt path.
-VERSION=$(sed <<<$QTBINDIR -e 's,/,\n,g' | grep -e '^[Qq][Tt][0-9][0-9\.-]*$' -e '^[0-9][0-9\.-]*$' | sed -e 's/^[Qq][Tt]//' | head -1)
-[[ -z "$VERSION" ]] && error "Qt version not found from $VERSION"
+VERSION=$(tr <<<$QTBINDIR / '\n'  | grep -e '^[Qq][Tt][0-9][0-9\.-]*$' -e '^[0-9][0-9\.-]*$' | sed -e 's/^[Qq][Tt]//' | head -1)
+[[ -z "$VERSION" ]] && error "Qt version not found from $QTBINDIR"
 
 # The DMG will be initially created into TMPDIR, later converted into installers.
 DMGTMP="$TMPDIR/QtLinguist.dmg"
@@ -77,13 +78,27 @@ DEV=$(echo $DEVS | cut -f 1 -d ' ')
 cp -rp "$LINGDIR" "$VOLAPP"
 
 # Deploy Qt requirements in the bundle.
-macdeployqt "$VOLAPP" -verbose=1 -always-overwrite
+$QTBINDIR/macdeployqt "$VOLAPP" -verbose=1 -always-overwrite
+
+# Install translations in the bundle.
+APPTRANS="$VOLAPP/Contents/MacOS/translations"
+mkdir -p "$APPTRANS"
+for app in linguist qt qtbase qtconfig; do
+    cp "$QTDIR"/translations/${app}_*.qm "$APPTRANS"
+done
+chmod 755 "$APPTRANS"
+chmod 644 "$APPTRANS"/*
+
+# Need to patch "cmd LC_RPATH" in "$VOLAPP/Contents/MacOS/Linguist"
+# from @loader_path/../../../../lib
+# to   @executable_path/../Frameworks
+install_name_tool "$VOLAPP/Contents/MacOS/Linguist" -rpath @loader_path/../../../../lib @executable_path/../Frameworks 
 
 # Create a symbolic link to /Applications to facilitate the drag & drop.
 ln -sf /Applications "$VOLROOT/Applications"
 
 # Add a drive icon
-cp "$ROOTDIR/images/drive.icns" "$VOLROOT/.VolumeIcon.icns"
+cp "$ROOTDIR/images/linguist-drive.icns" "$VOLROOT/.VolumeIcon.icns"
 SetFile -c icnC "$VOLROOT/.VolumeIcon.icns"
 SetFile -a C "$VOLROOT"
 
@@ -115,5 +130,12 @@ echo '
 hdiutil detach $DEV
 
 # Convert the disk image to read-only
+rm -rf "$DMGFILE"
 hdiutil convert "$DMGTMP" -format UDZO -o "$DMGFILE"
 rm -rf "$TMPDIR"
+
+# Export the binaries to a shared environment, if it exists.
+# Define the environment variable DELIVERY to point to the shared export.
+# Default value:
+DELIVERY_DIR=${DELIVERY:-$HOME/devel}/qtlinguist-installers/installers
+[[ -d "$DELIVERY_DIR" ]] && cp -v "$DMGFILE" "$DELIVERY_DIR"
