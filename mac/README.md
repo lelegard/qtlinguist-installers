@@ -15,6 +15,6 @@ Sample download link for [Qt 5.7.0](http://download.qt.io/official_releases/qt/5
 The generated file is a `.dmg` image, like most Mac OS installers.
 Double-click on this file from the Finder.
 The volume image is mounted and opened in the Finder.
-Simply drag the *Qt Linguist* icon and drop it into the *Applications" icon to install Qt Linguist.
+Simply drag the *Qt Linguist* icon and drop it into the *Applications* icon to install Qt Linguist.
 
 Qt Linguist can now be started from the *Launch Pad*.
