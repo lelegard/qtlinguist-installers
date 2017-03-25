@@ -19,6 +19,6 @@
 *.log
 *.tmp
 *.part
-.DS_Store
+*.DS_Store
 .project
 tmp
