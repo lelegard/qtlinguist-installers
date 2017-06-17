@@ -84,6 +84,116 @@ function Search-File ([string]$File, $DirList)
     return $path
 }
 
+#-----------------------------------------------------------------------------
+
+<#
+ .SYNOPSIS
+
+  Create a zip file from any files piped in.
+
+ .PARAMETER Path
+
+  The name of the zip archive to create.
+
+ .PARAMETER Root
+
+  Store directory names in the zip entries. Use the same hierarchy as input
+  files but strip the root from their full name. If unspecified, create a
+  flat archive of files without hierarchy.
+
+ .PARAMETER Force
+
+  If specified, delete the zip archive if it already exists.
+
+ .EXAMPLE
+
+  PS > dir *.ps1 | New-ZipFile scripts.zip
+  Copies all PS1 files in the current directory to scripts.zip
+
+ .EXAMPLE
+
+  PS > "readme.txt" | New-ZipFile docs.zip
+  Copies readme.txt to docs.zip
+
+ .NOTES
+
+  Initial version from Windows PowerShell Cookbook (O'Reilly)
+  by Lee Holmes (http://www.leeholmes.com/guide)
+  with additional options.
+
+  This function requires Microsoft .NET Framework version 4.5 or higher.
+  See http://www.microsoft.com/en-us/download/details.aspx?id=30653 or, for
+  a full offline package, http://go.microsoft.com/fwlink/?LinkId=225702
+  (dotnetfx45_full_x86_x64.exe).
+#>
+function New-ZipFile
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true,Position=1)][String] $Path,
+        [Parameter(Mandatory=$false,Position=2)][String] $Root = $null,
+        [Parameter(ValueFromPipeline=$true)] $Input,
+        [Switch] $Force
+    )
+
+    Set-StrictMode -Version 3
+
+    # Check if the file exists already.
+    $ZipName = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    if (Test-Path $ZipName) {
+        if ($Force) {
+            Remove-Item $ZipName -Force
+        }
+        else {
+            # Zip file exists and no -Force option, generate an error.
+            throw "$ZipName already exists."
+        }
+    }
+
+    # Build the root path, i.e. the path to strip from entries directory path.
+    if ($Root) {
+        $Root = (Get-Item $Root).FullName
+    }
+
+    # Add the DLL that helps with file compression.
+    # This requires .NET 4.5 (FileNotFoundException on previous releases).
+    Add-Type -Assembly System.IO.Compression.FileSystem
+
+    try {
+        # Open the Zip archive
+        $archive = [System.IO.Compression.ZipFile]::Open($ZipName, "Create")
+
+        # Go through each file in the input, adding it to the Zip file specified
+        foreach ($file in $Input) {
+            $item = $file | Get-Item
+            # Skip the current file if it is the zip file itself
+            if ($item.FullName -eq $ZipName) {
+                continue
+            }
+            # Skip directories
+            if ($item.PSIsContainer) {
+                continue
+            }
+            # Compute entry name in archive.
+            if ($Root -and $item.FullName -like "$Root\*") {
+                $name = $item.FullName.Substring($Root.Length + 1)
+            }
+            else {
+                $name = $item.Name
+            }
+            # Add the file to the archive.
+            $null = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $item.FullName, $name)
+        }
+    }
+    finally {
+        # Close the file
+        $archive.Dispose()
+        $archive = $null
+    }
+}
+
+#-----------------------------------------------------------------------------
+
 # Get the project directories.
 
 $RootDir = (Split-Path -Parent $PSScriptRoot)
@@ -203,8 +313,8 @@ while (!$VcredistDir -and $path -ne "") {
     }
 }
 if ($VcredistDir) {
-    # vcredist directory found, search executables here
-    $exe = @(Get-ChildItem $VcredistDir -Filter *.exe)
+    # vcredist directory found, search executables here.
+    $exe = @(Get-ChildItem $VcredistDir -Filter *.exe | Where-Object Name -NotLike *x64.exe)
     if ($exe.Count -eq 1) {
         $VcredistExe = $exe[0].FullName
         $VcredistName = (Split-Path -Leaf $VcredistExe)
@@ -228,21 +338,35 @@ if (Test-Path $TempDir) {
 # The rest of the script is in a try block to ensure the cleanup of the temporary directory.
 
 try {
+    $TempRootDir = (Join-Path $TempDir "QtLinguist")
+    [void] (New-Item -ItemType Directory -Force $TempRootDir)
+    $TempBinDir = (Join-Path $TempRootDir "bin")
+    [void] (New-Item -ItemType Directory -Force $TempBinDir)
+
     # Copy Linguist in temporary directory and "deploy" dependant modules.
-    Copy-Item $LinguistExe $TempDir
-    & $WinDeployExe $TempDir --release --no-quick-import --no-system-d3d-compiler --no-webkit2 --no-angle --no-opengl-sw 
-    Copy-Item (Join-Path $QtBinDir lconvert.exe) $TempDir
-    Copy-Item (Join-Path $QtBinDir lrelease.exe) $TempDir
-    Copy-Item (Join-Path $QtBinDir lupdate.exe) $TempDir
+    Copy-Item $LinguistExe $TempBinDir
+    & $WinDeployExe $TempBinDir --release --no-quick-import --no-system-d3d-compiler --no-webkit2 --no-angle --no-opengl-sw 
+    Copy-Item (Join-Path $QtBinDir lconvert.exe) $TempBinDir
+    Copy-Item (Join-Path $QtBinDir lrelease.exe) $TempBinDir
+    Copy-Item (Join-Path $QtBinDir lupdate.exe) $TempBinDir
 
     # Build the installer.
     & $NsisExe.FullName `
         "/DProductVersion=$Version" `
         "/DRootDir=$RootDir" `
-        "/DBinDir=$TempDir" `
+        "/DBinDir=$TempBinDir" `
         "/DVcredistExe=$VcredistExe" `
         "/DVcredistName=$VcredistName" `
         "$($NsisScript.FullName)"
+
+    # Copy VC++ redistributable libraries.
+    $TempRedistDir = (Join-Path $TempRootDir "vcredist")
+    [void] (New-Item -ItemType Directory -Force $TempRedistDir)
+    Copy-Item $VcredistExe $TempRedistDir
+
+    # Build standalone installer.
+    $ZipInstaller = (Join-Path $InstallerDir "QtLinguist-Standalone-$Version.zip")
+    Get-ChildItem -Recurse $TempRootDir | New-ZipFile $ZipInstaller -Force -Root $TempDir
 }
 finally {
     # Cleanup temporary directory.

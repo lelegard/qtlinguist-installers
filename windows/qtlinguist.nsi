@@ -101,7 +101,7 @@ Section "Install"
     WriteUninstaller "$INSTDIR\QtLinguistUninstall.exe"
 
     ; Install 'vcredist' (Visual C++ Redistributable) if available.
-    !if ${VcredistExe} != ""
+    !if "${VcredistExe}" != ""
         SetOutPath "$INSTDIR\vcredist"
         File "${VcredistExe}"
         ExecWait '"$INSTDIR\vcredist\${VcredistName}" /install /quiet /norestart'

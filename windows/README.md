@@ -12,7 +12,7 @@ Be sure to select the option "MinGW" in the "Tools" section (this option is disa
 - build-windows.ps1 : PowerShell script to build the installer.
 - qtlinguist.nsi : NSIS (Nullsoft Scriptable Installation System) script.
 
-### Building the Qt Linguist installer
+### Building the Qt Linguist installers
 
 Execute the script `build-windows.ps1` from PowerShell.
 
@@ -40,3 +40,13 @@ Version of Qt Linguist. The default is extracted from the Qt directory name.
 Do not wait for the user to press <enter> at end of execution. By default,
 execute a "pause" instruction at the end of execution, which is useful
 when the script was run from Windows Explorer.
+
+### Using the installers
+
+The script generates two installers, a classical one and a standalone / portable one.
+
+The classical installer is the `.exe` file. Execute it to install Qt Linguist.
+
+The standalone / portable installer is the `.zip` file. It is meant to be used
+be users without administration privileges on the Windows system. Simply unzip
+the file anywhere. To run Qt Linguist, simply execute `QtLinguist\bin\linguist.exe`.
