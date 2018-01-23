@@ -1,7 +1,7 @@
 #!/bin/bash
 #-----------------------------------------------------------------------------
 #
-#  Copyright (c) 2016, Thierry Lelegard
+#  Copyright (c) 2016-2018, Thierry Lelegard
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -81,13 +81,19 @@ cp -rp "$LINGDIR" "$VOLAPP"
 $QTBINDIR/macdeployqt "$VOLAPP" -verbose=1 -always-overwrite
 
 # Install translations in the bundle.
-APPTRANS="$VOLAPP/Contents/MacOS/translations"
+APPTRANS="$VOLAPP/Contents/Resources/translations"
 mkdir -p "$APPTRANS"
-for app in linguist qt qtbase qtconfig; do
+for app in linguist qt qtbase qtscript qtquick1 qtmultimedia qtxmlpatterns; do
     cp "$QTDIR"/translations/${app}_*.qm "$APPTRANS"
 done
 chmod 755 "$APPTRANS"
 chmod 644 "$APPTRANS"/*
+
+# Declare the translation directory in qt.conf.
+# The file qt.conf shall have been created by macdeployqt.
+QTCONF="$VOLAPP/Contents/Resources/qt.conf"
+[[ -e "$QTCONF" ]] || error "$QTCONF not found"
+echo "Translations = Resources/translations" >>"$QTCONF"
 
 # Need to patch "cmd LC_RPATH" in "$VOLAPP/Contents/MacOS/Linguist"
 # from @loader_path/../../../../lib

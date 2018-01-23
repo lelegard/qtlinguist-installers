@@ -1,6 +1,6 @@
 ;-----------------------------------------------------------------------------
 ; 
-;  Copyright (c) 2016, Thierry Lelegard
+;  Copyright (c) 2016-2018, Thierry Lelegard
 ;  All rights reserved.
 ; 
 ;  Redistribution and use in source and binary forms, with or without
@@ -166,6 +166,7 @@ Section "Install"
 
     ; Cleanup previous install.
     RMDir /r "$INSTDIR\bin"
+    RMDir /r "$INSTDIR\translations"
     RMDir /r "$INSTDIR\vcredist"
 
     ; Install product files.
@@ -207,6 +208,7 @@ Section "Uninstall"
 
     ; Delete product files.
     RMDir /r "$INSTDIR\bin"
+    RMDir /r "$INSTDIR\translations"
     RMDir /r "$INSTDIR\vcredist"
     Delete "$INSTDIR\QtLinguistUninstall.exe"
     RMDir "$INSTDIR"

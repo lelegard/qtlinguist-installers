@@ -1,6 +1,6 @@
 ﻿#-----------------------------------------------------------------------------
 #
-#  Copyright (c) 2016, Thierry Lelegard
+#  Copyright (c) 2016-2018, Thierry Lelegard
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -81,7 +81,7 @@ function Search-File ([string]$File, $DirList)
     if ($path -eq $null) {
         Exit-Script "$File not found in $DirList"
     }
-    return $path
+    return $path.FullName
 }
 
 #-----------------------------------------------------------------------------
@@ -207,6 +207,7 @@ $NsisScript = (Search-File "qtlinguist.nsi" $PSScriptRoot)
 
 # Locate the latest Qt installation.
 # We will locate linguist.exe and gcc.exe under Qt installation tree.
+# We do not compile anything but gcc is required by windeployqt.
 # We do not simply use a "Get-ChildItem -Recurse". This would be
 # simple and neat, but awfully slow since a Qt installation tree
 # contains thousands of files. In exploring the Qt installation, we
@@ -272,6 +273,11 @@ Write-Output "GCC path is $GccExe"
 
 $QtBinDir = (Split-Path -Parent $LinguistExe)
 $WinDeployExe = (Search-File "windeployqt.exe" $QtBinDir)
+
+# The Qt translations directory is normally found at the same level as the bin directory.
+
+$TranslationsDir = (Search-File "translations" (Split-Path -Parent $QtBinDir))
+Write-Output "Translations path is $TranslationsDir"
 
 # Define a clean and safe path: Qt, GCC and Windows only.
 
@@ -342,22 +348,37 @@ try {
     [void] (New-Item -ItemType Directory -Force $TempRootDir)
     $TempBinDir = (Join-Path $TempRootDir "bin")
     [void] (New-Item -ItemType Directory -Force $TempBinDir)
+    $TempTransDir = (Join-Path $TempBinDir "translations")
+    [void] (New-Item -ItemType Directory -Force $TempTransDir)
 
-    # Copy Linguist in temporary directory and "deploy" dependant modules.
+    # Copy Linguist in temporary directory.
     Copy-Item $LinguistExe $TempBinDir
+
+    # "Deploy" dependent modules.
     & $WinDeployExe $TempBinDir --release --no-quick-import --no-system-d3d-compiler --no-webkit2 --no-angle --no-opengl-sw 
+
+    # Copy additional executables.
     Copy-Item (Join-Path $QtBinDir lconvert.exe) $TempBinDir
     Copy-Item (Join-Path $QtBinDir lrelease.exe) $TempBinDir
     Copy-Item (Join-Path $QtBinDir lupdate.exe) $TempBinDir
 
+    # Copy translation files.
+    Copy-Item (Join-Path $TranslationsDir "linguist_*.qm") $TempTransDir
+    Copy-Item (Join-Path $TranslationsDir "qt_*.qm") $TempTransDir
+    Copy-Item (Join-Path $TranslationsDir "qtbase_*.qm") $TempTransDir
+    Copy-Item (Join-Path $TranslationsDir "qtscript_*.qm") $TempTransDir
+    Copy-Item (Join-Path $TranslationsDir "qtquick1_*.qm") $TempTransDir
+    Copy-Item (Join-Path $TranslationsDir "qtmultimedia_*.qm") $TempTransDir
+    Copy-Item (Join-Path $TranslationsDir "qtxmlpatterns_*.qm") $TempTransDir
+
     # Build the installer.
-    & $NsisExe.FullName `
+    & $NsisExe `
         "/DProductVersion=$Version" `
         "/DRootDir=$RootDir" `
         "/DBinDir=$TempBinDir" `
         "/DVcredistExe=$VcredistExe" `
         "/DVcredistName=$VcredistName" `
-        "$($NsisScript.FullName)"
+        "$($NsisScript)"
 
     # Copy VC++ redistributable libraries.
     $TempRedistDir = (Join-Path $TempRootDir "vcredist")
