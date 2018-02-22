@@ -386,7 +386,7 @@ try {
     Copy-Item $VcredistExe $TempRedistDir
 
     # Build standalone installer.
-    $ZipInstaller = (Join-Path $InstallerDir "QtLinguist-Standalone-$Version.zip")
+    $ZipInstaller = (Join-Path $InstallerDir "QtLinguist-$Version-Standalone.zip")
     Get-ChildItem -Recurse $TempRootDir | New-ZipFile $ZipInstaller -Force -Root $TempDir
 }
 finally {
