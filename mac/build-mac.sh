@@ -38,24 +38,26 @@ error() { echo >&2 "$SCRIPT: $*"; exit 1; }
 # Uncompressed DMG size.
 DMGSIZE=64m
 
+# Get and verify Qt installation path
+QTDIR=${1:-$QTDIR}
+[[ -z "$QTDIR" ]] && error "Path to Qt installation must be given as parameter or via environment variable QTDIR"
+QTBINDIR="$QTDIR/bin"
+[[ ! -f "$QTBINDIR/qmake" ]] && error "Could not find qmake in $QTBINDIR"
+
 # Various directories.
 SCRIPTDIR=$(cd $(dirname $BASH_SOURCE); pwd)
 ROOTDIR=$(dirname $SCRIPTDIR)
 TMPDIR=$SCRIPTDIR/tmp
 
-# On Mac OS, Qt is installed in user's account.
-QMAKE=$(find $HOME/[Qq]* -type f -perm +0100 -name qmake 2>/dev/null | sort | tail -1)
-[[ -z "$QMAKE" ]] && error "no Qt installation found in $HOME"
-QTBINDIR=$(dirname "$QMAKE")
-QTDIR=$(cd "$QTBINDIR/.."; pwd)
-
 # Liguist is bundled in same directory as qmake.
 LINGDIR="$QTBINDIR/Linguist.app"
 [[ -x "$LINGDIR/Contents/MacOS/Linguist" ]] || error "Linguist not found in $LINGDIR"
 
-# Get Qt version from the Qt path.
-VERSION=$(tr <<<$QTBINDIR / '\n'  | grep -e '^[Qq][Tt][0-9][0-9\.-]*$' -e '^[0-9][0-9\.-]*$' | sed -e 's/^[Qq][Tt]//' | head -1)
-[[ -z "$VERSION" ]] && error "Qt version not found from $QTBINDIR"
+# Get Qt version from qmake.
+VERSION=$("$QTBINDIR/qmake" --version | grep -o '[Qq]t [Vv]ersion [0-9][0-9\.-]*' | sed -e 's/^[Qq]t [Vv]ersion //')
+[[ -z "$VERSION" ]] && error "Could not determine Qt version"
+
+echo "Using Qt $VERSION from $QTDIR"
 
 # The DMG will be initially created into TMPDIR, later converted into installers.
 DMGTMP="$TMPDIR/QtLinguist.dmg"
