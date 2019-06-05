@@ -113,6 +113,7 @@ SetFile -a C "$VOLROOT"
 # Format the appearance of the DMG in Finder when opened.
 mkdir -p "$VOLROOT/.background"
 cp $ROOTDIR/images/dmg-background.png "$VOLROOT/.background/background.png"
+rm -rf "$VOLROOT/.fseventsd" "$VOLROOT/.DS_store"
 echo '
    tell application "Finder"
      tell disk "'${VOLUME}'"
@@ -125,6 +126,7 @@ echo '
            set arrangement of theViewOptions to not arranged
            set icon size of theViewOptions to 128
            set background picture of theViewOptions to file ".background:background.png"
+           set position of item ".background" of container window to {1000, 1000}
            set position of item "Qt Linguist" of container window to {100, 100}
            set position of item "Applications" of container window to {375, 100}
            update without registering applications
