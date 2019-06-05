@@ -42,7 +42,8 @@ DMGSIZE=64m
 QTDIR=${1:-$QTDIR}
 [[ -z "$QTDIR" ]] && error "Path to Qt installation must be given as parameter or via environment variable QTDIR"
 QTBINDIR="$QTDIR/bin"
-[[ ! -f "$QTBINDIR/qmake" ]] && error "Could not find qmake in $QTBINDIR"
+QMAKE="$QTBINDIR/qmake"
+[[ -x "$QMAKE" ]] || error "qmake not found in $QTBINDIR"
 
 # Various directories.
 SCRIPTDIR=$(cd $(dirname $BASH_SOURCE); pwd)
@@ -54,7 +55,7 @@ LINGDIR="$QTBINDIR/Linguist.app"
 [[ -x "$LINGDIR/Contents/MacOS/Linguist" ]] || error "Linguist not found in $LINGDIR"
 
 # Get Qt version from qmake.
-VERSION=$("$QTBINDIR/qmake" --version | grep -o '[Qq]t [Vv]ersion [0-9][0-9\.-]*' | sed -e 's/^[Qq]t [Vv]ersion //')
+VERSION=$("$QMAKE" --version | grep -o '[Qq]t [Vv]ersion [0-9][0-9\.-]*' | sed -e 's/^[Qq]t [Vv]ersion //')
 [[ -z "$VERSION" ]] && error "Could not determine Qt version"
 
 echo "Using Qt $VERSION from $QTDIR"
