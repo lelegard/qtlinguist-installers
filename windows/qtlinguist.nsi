@@ -40,7 +40,8 @@ Name "Qt Linguist"
 !verbose pop
 
 ; Installer file name.
-OutFile "${RootDir}\installers\QtLinguist-${ProductVersion}.exe"
+OutFile "${RootDir}\installers\${ExeFileName}.exe"
+
 
 ; Registry entry for product info and uninstallation info.
 !define ProductKey "Software\QtLinguist"

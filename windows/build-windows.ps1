@@ -328,6 +328,7 @@ if ($VcredistDir) {
     }
     elseif ($exe.Count -gt 1) {
         Write-Output "More that one .exe in $VcredistDir"
+        $VCRedistrError="S"
     }
     else {
         Write-Output "No VC++ Redistributable found"
@@ -371,6 +372,7 @@ try {
     Copy-Item (Join-Path $TranslationsDir "qtmultimedia_*.qm") $TempTransDir
     Copy-Item (Join-Path $TranslationsDir "qtxmlpatterns_*.qm") $TempTransDir
 
+ $InstallerFileName="QtLinguist-$Version"
     # Build the installer.
     & $NsisExe `
         "/DProductVersion=$Version" `
@@ -378,15 +380,17 @@ try {
         "/DBinDir=$TempBinDir" `
         "/DVcredistExe=$VcredistExe" `
         "/DVcredistName=$VcredistName" `
+        "/DExeFileName=$InstallerFileName" `
         "$($NsisScript)"
 
     # Copy VC++ redistributable libraries.
     $TempRedistDir = (Join-Path $TempRootDir "vcredist")
     [void] (New-Item -ItemType Directory -Force $TempRedistDir)
-    Copy-Item $VcredistExe $TempRedistDir
-
+    if (!$TempRedistDir) {
+       Copy-Item $VcredistExe $TempRedistDir
+    }
     # Build standalone installer.
-    $ZipInstaller = (Join-Path $InstallerDir "QtLinguist-Standalone-$Version.zip")
+    $ZipInstaller = (Join-Path $InstallerDir "$InstallerFileName.zip")
     Get-ChildItem -Recurse $TempRootDir | New-ZipFile $ZipInstaller -Force -Root $TempDir
 }
 finally {
