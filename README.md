@@ -1,6 +1,6 @@
-## Standalone binary installers for Qt Linguist
+# Standalone binary installers for Qt Linguist
 
-### Qt Linguist
+## Qt Linguist
 
 [Qt](https://www.qt.io/) is a powerful portable development environment.
 Qt applications are easily translatable. Developers typically write their
@@ -22,14 +22,16 @@ is Linguist. Asking them to download and install 1 GB of Qt SDK is not acceptabl
 most of them.
 
 So, having a solution to download and install Qt Linguist only is a legitimate
-requirement for translators. However, there is no official standalone installer
-for Qt Linguist available from the Qt project.
+requirement for translators.
 
 Since such installers are real requirements, custom binary installers for Qt Linguist
 are available from many third-party download sites. However, there is a security issue
 here. We have no guarantee that the application they install is genuine and free of malware.
 
-### The project `qtlinguist-installers`
+This issue was partially addressed by the Qt project which proposes a standalone Windows
+installer for older versions of Qt Linguist [here](https://download.qt.io/linguist_releases/).
+
+## The project `qtlinguist-installers`
 
 The purpose of [this project](https://github.com/lelegard/qtlinguist-installers/)
 is to provide Open Source scripts to rebuild standalone binary installers for
@@ -48,7 +50,7 @@ As an example, a standalone binary installer for Qt Linguist on Windows is 17 MB
 big and uses 33 MB of disk space after installation. Compare this to 1 GB of
 installer and 4 GB of disk space for the complete Qt environment.
 
-### Target environments
+## Target environments
 
 This project provides installers for Windows and Mac OS, the two main working
 environments for non-technical translators.
@@ -57,3 +59,13 @@ Most Linux distros provide a segmented installation of the Qt environment,
 many small packages with dependency management, instead of a huge
 global Qt installer. In this context, installing Qt Linguist only is
 probably already available.
+
+## Project status
+
+When the `qtlinguist-installers` project was created, the Qt project did not provide any
+standalone installer for Qt Linguist. Since then, a Windows installer is
+[available here](https://github.com/lelegard/qtlinguist-installers/releases).
+
+This new situation make the `qtlinguist-installers` project less necessary.
+The scripts in this project will remain available but no new binary package
+will be provided in the _Releases_ area of this project.
