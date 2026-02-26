@@ -52,7 +52,7 @@ installer and 4 GB of disk space for the complete Qt environment.
 
 ## Target environments
 
-This project provides installers for Windows and Mac OS, the two main working
+This project provides installers for Windows and macOS, the two main working
 environments for non-technical translators.
 
 Most Linux distros provide a segmented installation of the Qt environment,

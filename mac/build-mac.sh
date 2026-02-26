@@ -27,7 +27,7 @@
 #
 #-----------------------------------------------------------------------------
 #
-#  Shell script to build the DMG package for Qt Linguist on Mac OS.
+#  Shell script to build the DMG package for Qt Linguist on macOS.
 #
 #-----------------------------------------------------------------------------
 
@@ -36,14 +36,14 @@ SCRIPT=$(basename $BASH_SOURCE)
 error() { echo >&2 "$SCRIPT: $*"; exit 1; }
 
 # Uncompressed DMG size.
-DMGSIZE=64m
+DMGSIZE=128m
 
 # Various directories.
 SCRIPTDIR=$(cd $(dirname $BASH_SOURCE); pwd)
 ROOTDIR=$(dirname $SCRIPTDIR)
 TMPDIR=$SCRIPTDIR/tmp
 
-# On Mac OS, Qt is installed in user's account.
+# On macOS, Qt is installed in user's account.
 QMAKE=$(find $HOME/[Qq]* -type f -perm +0100 -name qmake 2>/dev/null | sort | tail -1)
 [[ -z "$QMAKE" ]] && error "no Qt installation found in $HOME"
 QTBINDIR=$(dirname "$QMAKE")
@@ -56,6 +56,9 @@ LINGDIR="$QTBINDIR/Linguist.app"
 # Get Qt version from the Qt path.
 VERSION=$(tr <<<$QTBINDIR / '\n'  | grep -e '^[Qq][Tt][0-9][0-9\.-]*$' -e '^[0-9][0-9\.-]*$' | sed -e 's/^[Qq][Tt]//' | head -1)
 [[ -z "$VERSION" ]] && error "Qt version not found from $QTBINDIR"
+
+echo "Qt root: $QTDIR"
+echo "Qt version: $VERSION"
 
 # The DMG will be initially created into TMPDIR, later converted into installers.
 DMGTMP="$TMPDIR/QtLinguist.dmg"
@@ -83,7 +86,7 @@ $QTBINDIR/macdeployqt "$VOLAPP" -verbose=1 -always-overwrite
 # Install translations in the bundle.
 APPTRANS="$VOLAPP/Contents/Resources/translations"
 mkdir -p "$APPTRANS"
-for app in linguist qt qtbase qtscript qtquick1 qtmultimedia qtxmlpatterns; do
+for app in linguist assistant qt qt_help qtbase qtmultimedia; do
     cp "$QTDIR"/translations/${app}_*.qm "$APPTRANS"
 done
 chmod 755 "$APPTRANS"
