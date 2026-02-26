@@ -2,10 +2,7 @@
 
 ### Prerequisites
 
-Install Qt for Windows with MinGW environment.
-Sample download link for [Qt 5.7.0](http://download.qt.io/official_releases/qt/5.7/5.7.0/qt-opensource-windows-x86-mingw530-5.7.0.exe).
-
-Be sure to select the option "MinGW" in the "Tools" section (this option is disabled by default).
+Install ["Qt for Open Source Use"](https://www.qt.io/development/download-qt-installer-oss) for Windows with MinGW environment.
 
 ### Files
 

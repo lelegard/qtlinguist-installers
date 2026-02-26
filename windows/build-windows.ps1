@@ -1,6 +1,6 @@
 ﻿#-----------------------------------------------------------------------------
 #
-#  Copyright (c) 2016-2018, Thierry Lelegard
+#  Copyright (c) 2016-2026, Thierry Lelegard
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -104,27 +104,6 @@ function Search-File ([string]$File, $DirList)
  .PARAMETER Force
 
   If specified, delete the zip archive if it already exists.
-
- .EXAMPLE
-
-  PS > dir *.ps1 | New-ZipFile scripts.zip
-  Copies all PS1 files in the current directory to scripts.zip
-
- .EXAMPLE
-
-  PS > "readme.txt" | New-ZipFile docs.zip
-  Copies readme.txt to docs.zip
-
- .NOTES
-
-  Initial version from Windows PowerShell Cookbook (O'Reilly)
-  by Lee Holmes (http://www.leeholmes.com/guide)
-  with additional options.
-
-  This function requires Microsoft .NET Framework version 4.5 or higher.
-  See http://www.microsoft.com/en-us/download/details.aspx?id=30653 or, for
-  a full offline package, http://go.microsoft.com/fwlink/?LinkId=225702
-  (dotnetfx45_full_x86_x64.exe).
 #>
 function New-ZipFile
 {
@@ -320,7 +299,16 @@ while (!$VcredistDir -and $path -ne "") {
 }
 if ($VcredistDir) {
     # vcredist directory found, search executables here.
-    $exe = @(Get-ChildItem $VcredistDir -Filter *.exe | Where-Object Name -NotLike *x64.exe)
+    if ($env:PROCESSOR_ARCHITECTURE -like 'arm64*') {
+        $arch = "arm64"
+    }
+    elseif ($env:PROCESSOR_ARCHITECTURE -like 'amd64*') {
+        $arch = "x64"
+    }
+    else {
+        $arch = "x86"
+    }
+    $exe = @(Get-ChildItem $VcredistDir -Filter vc*${arch}.exe)
     if ($exe.Count -eq 1) {
         $VcredistExe = $exe[0].FullName
         $VcredistName = (Split-Path -Leaf $VcredistExe)
@@ -355,7 +343,7 @@ try {
     Copy-Item $LinguistExe $TempBinDir
 
     # "Deploy" dependent modules.
-    & $WinDeployExe $TempBinDir --release --no-quick-import --no-system-d3d-compiler --no-webkit2 --no-angle --no-opengl-sw 
+    & $WinDeployExe $TempBinDir --release --no-quick-import --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --no-ffmpeg
 
     # Copy additional executables.
     Copy-Item (Join-Path $QtBinDir lconvert.exe) $TempBinDir
@@ -364,12 +352,10 @@ try {
 
     # Copy translation files.
     Copy-Item (Join-Path $TranslationsDir "linguist_*.qm") $TempTransDir
+    Copy-Item (Join-Path $TranslationsDir "assistant_*.qm") $TempTransDir
     Copy-Item (Join-Path $TranslationsDir "qt_*.qm") $TempTransDir
     Copy-Item (Join-Path $TranslationsDir "qtbase_*.qm") $TempTransDir
-    Copy-Item (Join-Path $TranslationsDir "qtscript_*.qm") $TempTransDir
-    Copy-Item (Join-Path $TranslationsDir "qtquick1_*.qm") $TempTransDir
     Copy-Item (Join-Path $TranslationsDir "qtmultimedia_*.qm") $TempTransDir
-    Copy-Item (Join-Path $TranslationsDir "qtxmlpatterns_*.qm") $TempTransDir
 
     # Build the installer.
     & $NsisExe `

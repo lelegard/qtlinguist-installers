@@ -2,8 +2,8 @@
 
 ### Prerequisites
 
-Install Xcode from the Apple AppStore (free of charge).
-Install ["Qt for Open Source Use"](https://www.qt.io/development/download-qt-installer-oss) for macOS.
+- Install Xcode from the Apple AppStore (free of charge).
+- Install ["Qt for Open Source Use"](https://www.qt.io/development/download-qt-installer-oss) for macOS.
 
 ### Files
 
