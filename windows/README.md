@@ -4,6 +4,10 @@
 
 Install ["Qt for Open Source Use"](https://www.qt.io/development/download-qt-installer-oss) for Windows with MinGW environment.
 
+Do not forget to select the Qt components for the latest version of MinGW.
+In the list of components, select Qt -> Qt-with-latest-version -> MinGW-with-latest-version.
+If you want to develop with Qt on Windows, also select Build Tools -> MinGW-with-latest-version.
+
 ### Files
 
 - build-windows.ps1 : PowerShell script to build the installer.
@@ -46,4 +50,4 @@ The classical installer is the `.exe` file. Execute it to install Qt Linguist.
 
 The standalone / portable installer is the `.zip` file. It is meant to be used
 be users without administration privileges on the Windows system. Simply unzip
-the file anywhere. To run Qt Linguist, simply execute `QtLinguist\bin\linguist.exe`.
+the file anywhere. To run Qt Linguist, execute `QtLinguist\bin\linguist.exe`.

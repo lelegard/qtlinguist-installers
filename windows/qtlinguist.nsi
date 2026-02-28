@@ -1,6 +1,6 @@
 ;-----------------------------------------------------------------------------
 ; 
-;  Copyright (c) 2016-2018, Thierry Lelegard
+;  Copyright (c) 2016-2026, Thierry Lelegard
 ;  All rights reserved.
 ; 
 ;  Redistribution and use in source and binary forms, with or without
@@ -32,15 +32,40 @@
 ;-----------------------------------------------------------------------------
 
 Name "Qt Linguist"
+Caption "Qt Linguist Installer"
 
 !verbose push
 !verbose 0
 !include "MUI2.nsh"
 !include "WinMessages.nsh"
+!include "x64.nsh"
 !verbose pop
 
-; Installer file name.
-OutFile "${RootDir}\installers\QtLinguist-${ProductVersion}.exe"
+VIProductVersion ${ProductVersionInfo}
+VIAddVersionKey ProductName "Qt Linguist"
+VIAddVersionKey ProductVersion "${ProductVersion}"
+VIAddVersionKey Comments "Qt Linguist"
+VIAddVersionKey CompanyName "The Qt Company Ltd."
+VIAddVersionKey LegalCopyright "Copyright (c) The Qt Company Ltd."
+VIAddVersionKey FileVersion "${ProductVersionInfo}"
+VIAddVersionKey FileDescription "Qt Linguist Installer"
+
+; Name of binary installer file and default installation folder.
+!ifdef Win64
+    OutFile "${RootDir}\installers\QtLinguist-Win64-${ProductVersion}.exe"
+    InstallDir "$PROGRAMFILES64\Qt Linguist"
+!else ifdef Win32
+    OutFile "${RootDir}\installers\QtLinguist-Win32-${ProductVersion}.exe"
+    InstallDir "$PROGRAMFILES\Qt Linguist"
+!else ifdef Arm64
+    OutFile "${RootDir}\installers\QtLinguist-Arm64-${ProductVersion}.exe"
+    InstallDir "$PROGRAMFILES64\Qt Linguist"
+!else
+    Error "Undefined target platform"
+!endif
+
+; Generate a Unicode installer (default is ANSI).
+Unicode true
 
 ; Registry entry for product info and uninstallation info.
 !define ProductKey "Software\QtLinguist"
@@ -64,9 +89,6 @@ RequestExecutionLevel admin
 !define MUI_LANGDLL_REGISTRY_ROOT "HKCU"
 !define MUI_LANGDLL_REGISTRY_KEY "${ProductKey}"
 !define MUI_LANGDLL_REGISTRY_VALUENAME "Installer Language"
-
-; Default installation folder
-InstallDir "$PROGRAMFILES\Qt Linguist"
 
 ; Get installation folder from registry if available from a previous installation.
 InstallDirRegKey HKLM "${ProductKey}" "InstallDir"
@@ -145,14 +167,56 @@ InstallDirRegKey HKLM "${ProductKey}" "InstallDir"
 
 ; Installation initialization.
 function .onInit
+
     ; Language selection.
     !insertmacro MUI_LANGDLL_DISPLAY
+
+    ; In 64-bit installers, don't use registry redirection. Also prevent execution
+    ; of 64-bit installers on 32-bit systems (the installer itself is 32-bit and
+    ; can run on 32-bit systems but it contains 64-bit executables).
+    ${If} ${RunningX64}
+    ${OrIf} ${IsNativeARM64}
+        SetRegView 64
+    ${EndIf}
+
+    !ifdef Win64
+        ${IfNot} ${IsNativeAMD64}
+            MessageBox MB_OK|MB_ICONSTOP \
+                "This is a 64-bit Intel version of TSDuck.$\r$\n\
+                Not suitable for this system."
+            Quit
+        ${EndIf}
+    !else ifdef Arm64
+        ${IfNot} ${IsNativeARM64}
+            MessageBox MB_OK|MB_ICONSTOP \
+                "This is an Arm64 version of TSDuck.$\r$\n\
+                Not suitable for this system."
+            Quit
+        ${EndIf}
+    !else
+        ${If} ${IsNativeAMD64}
+        ${OrIf} ${IsNativeARM64}
+            MessageBox MB_OK|MB_ICONSTOP \
+                "This is a 32-bit Intel version of TSDuck.$\r$\n\
+                Not suitable for this system."
+            Quit
+        ${EndIf}
+    !endif
+
 functionEnd
 
 ; Uninstallation initialization.
 function un.onInit
+
     ; Retrieve the installer language.
     !insertmacro MUI_UNGETLANGUAGE
+
+    ; In 64-bit installers, don't use registry redirection.
+    ${If} ${RunningX64}
+    ${OrIf} ${IsNativeARM64}
+        SetRegView 64
+    ${EndIf}
+
 functionEnd
 
 ;-----------------------------------------------------------------------------

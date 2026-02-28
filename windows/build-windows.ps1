@@ -200,6 +200,20 @@ $GccExe = ""
 $QtSkipDirectories = @("doc", "docs", "examples", "imports", "include", "lib", "libexec", "licenses", "mkspecs", `
                        "opt", "plugins", "qml", "share", "src", "translations", "phrasebooks", "static")
 
+# Architecture-specific definitions.
+if ($env:PROCESSOR_ARCHITECTURE -like 'arm64*') {
+    $InstallerArch = "Arm64"
+    $VcredistArch = "arm64"
+}
+elseif ($env:PROCESSOR_ARCHITECTURE -like 'amd64*') {
+    $InstallerArch = "Win64"
+    $VcredistArch = "x64"
+}
+else {
+    $InstallerArch = "Win32"
+    $VcredistArch = "x86"
+}
+
 # This function explores a tree of directories and updates $LinguistExe and $GccExe.
 # Always sort subdirectories exploration in order to use the latest Qt installation
 # (we assume that the latest is the last one in alphabetical order, eg. 4.8.6, 5.0.2, 5.1.0).
@@ -267,7 +281,7 @@ $env:Path = $QtBinDir + ";" + (Split-Path -Parent $GccExe) + ";" + (Join-Path $e
 if (!$Version) {
     # Select the first element in path named "Qt<version>"
     $Version = ($QtBinDir -split '\\' | Where-Object {$_ -Match '^[Qq][Tt][0-9][0-9`.-]*$'} | Select-Object -First 1)
-    if ($Version -ne $null) {
+    if ($Version) {
         # Found, remove the leading 'Qt'
         $Version = ($Version -replace '^..','')
     }
@@ -279,7 +293,9 @@ if (!$Version) {
 if (!$Version) {
     Exit-Script "Qt version not found in $QtBinDir, use option -Version"
 }
-Write-Output "Linguist version is $Version"
+$VersionInfo = ($Version -split '\.') + @("0", "0", "0", "0")
+$VersionInfo = $VersionInfo[0..3] -join '.'
+Write-Output "Linguist version is $Version, Windows version info: $VersionInfo"
 
 # Check if there is a 'vcredist' (Visual C++ Redistributable) in the Qt installation.
 # Search a subdir named vcredist in the installation tree.
@@ -299,16 +315,7 @@ while (!$VcredistDir -and $path -ne "") {
 }
 if ($VcredistDir) {
     # vcredist directory found, search executables here.
-    if ($env:PROCESSOR_ARCHITECTURE -like 'arm64*') {
-        $arch = "arm64"
-    }
-    elseif ($env:PROCESSOR_ARCHITECTURE -like 'amd64*') {
-        $arch = "x64"
-    }
-    else {
-        $arch = "x86"
-    }
-    $exe = @(Get-ChildItem $VcredistDir -Filter vc*${arch}.exe)
+    $exe = @(Get-ChildItem $VcredistDir -Filter vc*${VcredistArch}.exe)
     if ($exe.Count -eq 1) {
         $VcredistExe = $exe[0].FullName
         $VcredistName = (Split-Path -Leaf $VcredistExe)
@@ -360,8 +367,10 @@ try {
     # Build the installer.
     & $NsisExe `
         "/DProductVersion=$Version" `
+        "/DProductVersionInfo=$VersionInfo" `
         "/DRootDir=$RootDir" `
         "/DBinDir=$TempBinDir" `
+        "/D$InstallerArch" `
         "/DVcredistExe=$VcredistExe" `
         "/DVcredistName=$VcredistName" `
         "$($NsisScript)"
@@ -372,7 +381,7 @@ try {
     Copy-Item $VcredistExe $TempRedistDir
 
     # Build standalone installer.
-    $ZipInstaller = (Join-Path $InstallerDir "QtLinguist-Standalone-$Version.zip")
+    $ZipInstaller = (Join-Path $InstallerDir "QtLinguist-${InstallerArch}-Standalone-${Version}.zip")
     Get-ChildItem -Recurse $TempRootDir | New-ZipFile $ZipInstaller -Force -Root $TempDir
 }
 finally {
