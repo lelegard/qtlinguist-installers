@@ -204,14 +204,17 @@ $QtSkipDirectories = @("doc", "docs", "examples", "imports", "include", "lib", "
 if ($env:PROCESSOR_ARCHITECTURE -like 'arm64*') {
     $InstallerArch = "Arm64"
     $VcredistArch = "arm64"
+    $NeedGcc = $false
 }
 elseif ($env:PROCESSOR_ARCHITECTURE -like 'amd64*') {
     $InstallerArch = "Win64"
     $VcredistArch = "x64"
+    $NeedGcc = $true
 }
 else {
     $InstallerArch = "Win32"
     $VcredistArch = "x86"
+    $NeedGcc = $true
 }
 
 # This function explores a tree of directories and updates $LinguistExe and $GccExe.
@@ -255,12 +258,17 @@ else {
 if (!$LinguistExe) {
     Exit-Script "Linguist.exe not found, retry with option -QtRoot"
 }
-if (!$GccExe) {
-    Exit-Script "gcc.exe not found, retry with option -QtRoot"
+else {
+    Write-Output "Linguist path is $LinguistExe"
 }
-
-Write-Output "Linguist path is $LinguistExe"
-Write-Output "GCC path is $GccExe"
+if ($NeedGcc) {
+    if (!$GccExe) {
+        Exit-Script "gcc.exe not found, retry with option -QtRoot"
+    }
+    else {
+        Write-Output "GCC path is $GccExe"
+    }
+}
 
 # Make sure that windeployqt is found in the same place as Linguist.
 
@@ -274,7 +282,12 @@ Write-Output "Translations path is $TranslationsDir"
 
 # Define a clean and safe path: Qt, GCC and Windows only.
 
-$env:Path = $QtBinDir + ";" + (Split-Path -Parent $GccExe) + ";" + (Join-Path $env:SystemRoot System32) + ";" + $env:SystemRoot
+if ($NeedGcc) {
+    $env:Path = $QtBinDir + ";" + (Split-Path -Parent $GccExe) + ";" + (Join-Path $env:SystemRoot System32) + ";" + $env:SystemRoot
+}
+else {
+    $env:Path = $QtBinDir + ";" + (Join-Path $env:SystemRoot System32) + ";" + $env:SystemRoot
+}
 
 # If Qt version was not specified in command line, try to get it from the linguist path.
 

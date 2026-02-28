@@ -4,7 +4,7 @@
 
 Install ["Qt for Open Source Use"](https://www.qt.io/development/download-qt-installer-oss) for Windows with MinGW environment.
 
-Do not forget to select the Qt components for the latest version of MinGW.
+On Intel systems (x86 and x64), do not forget to select the Qt components for the latest version of MinGW.
 In the list of components, select Qt -> Qt-with-latest-version -> MinGW-with-latest-version.
 If you want to develop with Qt on Windows, also select Build Tools -> MinGW-with-latest-version.
 
