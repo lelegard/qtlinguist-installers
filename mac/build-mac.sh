@@ -31,6 +31,11 @@
 #
 #-----------------------------------------------------------------------------
 
+# Remaining problem: In the deployed Linguist application, the help feature
+# does not work. Linguist tries to run Assistant from
+# /Applications/Qt Linguist.app/Contents/bin/Assistant.app/Contents/MacOS/Assistant
+
+
 # This script:
 SCRIPT=$(basename $BASH_SOURCE)
 error() { echo >&2 "$SCRIPT: $*"; exit 1; }
@@ -43,13 +48,15 @@ SCRIPTDIR=$(cd $(dirname $BASH_SOURCE); pwd)
 ROOTDIR=$(dirname $SCRIPTDIR)
 TMPDIR=$SCRIPTDIR/tmp
 
+# Find the codesign utility. It should come with Xcode command line tools.
+CODESIGN=$(xcrun --find codesign)
+[[ -z $CODESIGN ]] && error "codesign not found, install Xcode command line tools"
+
 # On macOS, Qt is installed in user's account.
 QMAKE=$(find $HOME/[Qq]* -type f -perm +0100 -name qmake 2>/dev/null | sort | tail -1)
 [[ -z "$QMAKE" ]] && error "no Qt installation found in $HOME"
 QTBINDIR=$(dirname "$QMAKE")
 QTDIR=$(cd "$QTBINDIR/.."; pwd)
-
-# Liguist is bundled in same directory as qmake.
 LINGDIR="$QTBINDIR/Linguist.app"
 [[ -x "$LINGDIR/Contents/MacOS/Linguist" ]] || error "Linguist not found in $LINGDIR"
 
@@ -80,8 +87,22 @@ DEV=$(echo $DEVS | cut -f 1 -d ' ')
 # Copy Linguist into disk image
 cp -rp "$LINGDIR" "$VOLAPP"
 
+# Remove the signature from Linguist executable. It will be modified by macdeployqt, making the
+# signature invalid, and making macdeployqt display error messages.
+$CODESIGN --remove-signature "$VOLAPP/Contents/MacOS/Linguist"
+
 # Deploy Qt requirements in the bundle.
 $QTBINDIR/macdeployqt "$VOLAPP" -verbose=1 -always-overwrite
+
+# Need to patch "cmd LC_RPATH" in "$VOLAPP/Contents/MacOS/Linguist"
+# from @loader_path/../../../../lib
+# to   @executable_path/../Frameworks
+install_name_tool "$VOLAPP/Contents/MacOS/Linguist" -rpath @loader_path/../../../../lib @executable_path/../Frameworks 
+
+# Rebuild a signature, without defined authority.
+# It would be better to completely remove the signature but I couldn't make it work.
+# The application is instantly killed with signal 9.
+$CODESIGN --force --sign - --timestamp=none --generate-entitlement-der "$VOLAPP/Contents/MacOS/Linguist"
 
 # Install translations in the bundle.
 APPTRANS="$VOLAPP/Contents/Resources/translations"
@@ -97,11 +118,6 @@ chmod 644 "$APPTRANS"/*
 QTCONF="$VOLAPP/Contents/Resources/qt.conf"
 [[ -e "$QTCONF" ]] || error "$QTCONF not found"
 echo "Translations = Resources/translations" >>"$QTCONF"
-
-# Need to patch "cmd LC_RPATH" in "$VOLAPP/Contents/MacOS/Linguist"
-# from @loader_path/../../../../lib
-# to   @executable_path/../Frameworks
-install_name_tool "$VOLAPP/Contents/MacOS/Linguist" -rpath @loader_path/../../../../lib @executable_path/../Frameworks 
 
 # Create a symbolic link to /Applications to facilitate the drag & drop.
 ln -sf /Applications "$VOLROOT/Applications"
