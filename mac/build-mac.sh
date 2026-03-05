@@ -31,34 +31,46 @@
 #
 #-----------------------------------------------------------------------------
 
-# Remaining problem: In the deployed Linguist application, the help feature
-# does not work. Linguist tries to run Assistant from
-# /Applications/Qt Linguist.app/Contents/bin/Assistant.app/Contents/MacOS/Assistant
-
-
-# This script:
 SCRIPT=$(basename $BASH_SOURCE)
 error() { echo >&2 "$SCRIPT: $*"; exit 1; }
+warning() { echo >&2 "warning: $*"; }
 
 # Uncompressed DMG size.
 DMGSIZE=128m
 
-# Various directories.
+# Required Qt plugins and translations.
+PLUGINS=(iconengines imageformats networkinformation platforms sqldrivers styles tls)
+TRANSLATIONS=(linguist assistant qt qt_help qtbase qtmultimedia)
+
+# Various directories in this project.
 SCRIPTDIR=$(cd $(dirname $BASH_SOURCE); pwd)
 ROOTDIR=$(dirname $SCRIPTDIR)
 TMPDIR=$SCRIPTDIR/tmp
 
-# Find the codesign utility. It should come with Xcode command line tools.
-CODESIGN=$(xcrun --find codesign)
-[[ -z $CODESIGN ]] && error "codesign not found, install Xcode command line tools"
+# The DMG will be initially created into TMPDIR, later converted into installers.
+DMGTMP="$TMPDIR/QtLinguist.dmg"
+
+# Find Xcode tools.
+find_xcode_tool() {
+    local cmd=$1
+    local file=$(xcrun -find $cmd 2>/dev/null)
+    [[ -z "$file" ]] && error "$cmd command not found, install Xcode command line tools"
+    echo "$file"
+}
+
+LIPO=$(find_xcode_tool lipo)
+OTOOL=$(find_xcode_tool otool)
 
 # On macOS, Qt is installed in user's account.
 QMAKE=$(find $HOME/[Qq]* -type f -perm +0100 -name qmake 2>/dev/null | sort | tail -1)
 [[ -z "$QMAKE" ]] && error "no Qt installation found in $HOME"
 QTBINDIR=$(dirname "$QMAKE")
-QTDIR=$(cd "$QTBINDIR/.."; pwd)
-LINGDIR="$QTBINDIR/Linguist.app"
-[[ -x "$LINGDIR/Contents/MacOS/Linguist" ]] || error "Linguist not found in $LINGDIR"
+QTDIR=$(dirname "$QTBINDIR")
+LINGUIST="$QTBINDIR/Linguist.app/Contents/MacOS/Linguist"
+[[ -x "$LINGUIST" ]] || error "Linguist not found in $QTDIR"
+
+# Supported architectures for Linguist.
+ARCHITECTURES=($("$LIPO" -archs "$LINGUIST"))
 
 # Get Qt version from the Qt path.
 VERSION=$(tr <<<$QTBINDIR / '\n'  | grep -e '^[Qq][Tt][0-9][0-9\.-]*$' -e '^[0-9][0-9\.-]*$' | sed -e 's/^[Qq][Tt]//' | head -1)
@@ -67,100 +79,179 @@ VERSION=$(tr <<<$QTBINDIR / '\n'  | grep -e '^[Qq][Tt][0-9][0-9\.-]*$' -e '^[0-9
 echo "Qt root: $QTDIR"
 echo "Qt version: $VERSION"
 
-# The DMG will be initially created into TMPDIR, later converted into installers.
-DMGTMP="$TMPDIR/QtLinguist.dmg"
-DMGFILE="$ROOTDIR/installers/QtLinguist-$VERSION.dmg"
-VOLUME="Qt Linguist $VERSION"
-VOLROOT="/Volumes/$VOLUME"
-VOLAPP="$VOLROOT/Qt Linguist.app"
+# Set an icon to a file or folder.
+# Syntax: set_icon icon-file destination-file
+set_icon() {
+    local icon="$1"
+    local dest="$2"
+    local name=$(basename "$icon")
+    local tmpdir=/tmp/$$
+    mkdir $tmpdir
 
-# Create DMG file.
-rm -rf "$TMPDIR"
-mkdir -p "$TMPDIR"
-hdiutil create -size $DMGSIZE -fs HFS+ -volname "$VOLUME" "$DMGTMP"
+    # Add icon to a copy of the icon file, meaning use itself as the icon.
+    cp "$icon" "$tmpdir/$name"
+    sips -i "$tmpdir/$name"
 
-# Mount the disk image
-hdiutil attach "$DMGTMP"
-DEVS=$(hdiutil attach "$DMGTMP" | cut -f 1)
-DEV=$(echo $DEVS | cut -f 1 -d ' ')
+    # Put that icon into a resource file.
+    DeRez -only icns "$tmpdir/$name" >"$tmpdir/rsrc"
 
-# Copy Linguist into disk image
-cp -rp "$LINGDIR" "$VOLAPP"
+    # Say that the destination file has a custom icon (attribute C).
+    SetFile -a C "$dest"
+    if [[ -f $iconDestination ]]; then
+        # Destination is a file.
+        Rez -append "$tmpdir/rsrc" -o "$dest"
+    elif [ -d $iconDestination ]; then
+        # Destination is a directory: create file Icon\r.
+        touch "$dest"/Icon$'\r'
+        Rez -append "$tmpdir/rsrc" -o "$dest"/Icon$'\r'
+        # Set Icon\r file as invisible for the Finder.
+        SetFile -a V "$dest"/Icon$'\r'
+    fi
 
-# Remove the signature from Linguist executable. It will be modified by macdeployqt, making the
-# signature invalid, and making macdeployqt display error messages.
-$CODESIGN --remove-signature "$VOLAPP/Contents/MacOS/Linguist"
+    rm -rf $tmpdir
+}
 
-# Deploy Qt requirements in the bundle.
-$QTBINDIR/macdeployqt "$VOLAPP" -verbose=1 -always-overwrite
+# Strip a universal binary. Keep only one architecture.
+# Syntax: remove_other_arch arch file
+remove_other_arch() {
+    local arch="$1"
+    local file="$2"
+    for a in $("$LIPO" -archs "$file" 2>/dev/null); do
+        [[ $a != $arch ]] && "$LIPO" -remove $a "$file" -output "$file"
+    done
+}
 
-# Need to patch "cmd LC_RPATH" in "$VOLAPP/Contents/MacOS/Linguist"
-# from @loader_path/../../../../lib
-# to   @executable_path/../Frameworks
-install_name_tool "$VOLAPP/Contents/MacOS/Linguist" -rpath @loader_path/../../../../lib @executable_path/../Frameworks 
+# Process a binary, remove other architecture, grab dependencies.
+# Syntax: process_binary arch dest-root file
+process_binary() {
+    local arch="$1"
+    local root="$2"
+    local file="$3"
+    remove_other_arch "$arch" "$file"
 
-# Rebuild a signature, without defined authority.
-# It would be better to completely remove the signature but I couldn't make it work.
-# The application is instantly killed with signal 9.
-$CODESIGN --force --sign - --timestamp=none --generate-entitlement-der "$VOLAPP/Contents/MacOS/Linguist"
+    # Analyze and copy dependencies.
+    for dep in $("$OTOOL" -L "$file" | grep @rpath/ | sed -e 's/ (.*//' -e 's/@rpath\///'); do
+        if [[ ! -e "$QTDIR/lib/$dep" ]]; then
+            echo >&2 "error: not found: $QTDIR/lib/$dep"
+        elif [[ ! -e "$root/lib/$dep" ]]; then
+            dir=$(dirname $dep)
+            if [[ $dir == . ]]; then
+                # Simple file.
+                cp "$QTDIR/lib/$dep" "$root/lib/$dep"
+            else
+                # Directory, probably a framework.
+                tar cf - --exclude Headers --no-mac-metadata -C "$QTDIR/lib" "$dir" | tar xf - -C "$root/lib"
+            fi
+            process_binary "$arch" "$root" "$root/lib/$dep"
+        fi
+    done
+}
 
-# Install translations in the bundle.
-APPTRANS="$VOLAPP/Contents/Resources/translations"
-mkdir -p "$APPTRANS"
-for app in linguist assistant qt qt_help qtbase qtmultimedia; do
-    cp "$QTDIR"/translations/${app}_*.qm "$APPTRANS"
+# Build an installer for one architecture.
+# Syntax: build_dmg arch
+build_dmg() {
+    ARCH="$1"
+    echo "Building installer for $ARCH ..."
+
+    DMGFILE="$ROOTDIR/installers/QtLinguist-$ARCH-$VERSION.dmg"
+    VOLUME="Qt Linguist $VERSION ($ARCH)"
+    VOLROOT="/Volumes/$VOLUME"
+    DESTNAME="Qt Linguist"
+    DESTAPP="$VOLROOT/$DESTNAME.app"
+    DESTRES="$DESTAPP/Contents/Resources"
+
+    # Create the content of the DMG file.
+    rm -rf "$TMPDIR"
+    mkdir -p "$TMPDIR"
+    hdiutil create -size $DMGSIZE -fs HFS+ -volname "$VOLUME" "$DMGTMP"
+
+    # Mount the disk image
+    hdiutil attach "$DMGTMP"
+    DEVS=$(hdiutil attach "$DMGTMP" | cut -f 1)
+    DEV=$(echo $DEVS | cut -f 1 -d ' ')
+
+    # Build a custom bundle with a subset of Qt structure in Resources.
+    mkdir -p "$DESTAPP/Contents/MacOS" "$DESTRES/bin" "$DESTRES/lib" "$DESTRES/plugins" "$DESTRES/translations"
+
+    # Copy application bundles.
+    cp -r "$QTBINDIR/Linguist.app" "$QTBINDIR/Assistant.app" "$DESTRES/bin"
+
+    for exe in "$DESTRES/bin/Linguist.app/Contents/MacOS/"* "$DESTRES/bin/Assistant.app/Contents/MacOS/"*; do
+        process_binary $ARCH "$DESTRES" "$exe"
+    done
+
+    # Copy plugins.
+    for pl in ${PLUGINS[*]}; do
+        cp -r "$QTDIR/plugins/$pl" "$DESTRES/plugins/$pl"
+    done
+
+    # Copy translation files.
+    for app in ${TRANSLATIONS[*]}; do
+        cp "$QTDIR/translations/"${app}_*.qm "$DESTRES/translations"
+    done
+
+    # Adjust architecture on shared libraries.
+    for file in $(find "$DESTAPP" -name '*.dylib'); do
+        remove_other_arch $ARCH "$file"
+    done
+ 
+    # Adjust protections.
+    find "$DESTAPP" \( -type d -o -name '*.dylib' \) -exec chmod 755 {} \;
+    find "$DESTAPP" -name '*.qm' -exec chmod 644 {} \;
+
+    # The global app is a script running Linguist.
+    APPSCRIPT="$DESTAPP/Contents/MacOS/$DESTNAME"
+    echo '#!/bin/sh' >"$APPSCRIPT"
+    echo 'dir=$(dirname "$0")' >>"$APPSCRIPT"
+    echo 'exec "$dir/../Resources/bin/Linguist.app/Contents/MacOS/Linguist"' >>"$APPSCRIPT"
+    chmod 755 "$APPSCRIPT"
+
+    # Set the icon for the outer Linguist bundle.
+    set_icon "$QTBINDIR/Linguist.app/Contents/Resources/linguist.icns" "$DESTAPP"
+
+    # Create a symbolic link to /Applications to facilitate the drag & drop.
+    ln -sf /Applications "$VOLROOT/Applications"
+
+    # Format the appearance of the DMG in Finder when opened.
+    mkdir -p "$VOLROOT/.background"
+    cp $ROOTDIR/images/dmg-background.png "$VOLROOT/.background/background.png"
+    SetFile -a V "$VOLROOT/.background"
+    echo '
+       tell application "Finder"
+         tell disk "'${VOLUME}'"
+               open
+               set current view of container window to icon view
+               set toolbar visible of container window to false
+               set statusbar visible of container window to false
+               set the bounds of container window to {400, 100, 900, 450}
+               set theViewOptions to the icon view options of container window
+               set arrangement of theViewOptions to not arranged
+               set icon size of theViewOptions to 128
+               set background picture of theViewOptions to file ".background:background.png"
+               set position of item "Qt Linguist" of container window to {100, 100}
+               set position of item "Applications" of container window to {375, 100}
+               update without registering applications
+               delay 5
+               close
+         end tell
+       end tell
+    ' | osascript
+
+    # Add a drive icon.
+    cp "$ROOTDIR/images/linguist-drive.icns" "$VOLROOT/.VolumeIcon.icns"
+    SetFile -a C "$VOLROOT"
+    SetFile -a V "$VOLROOT/.VolumeIcon.icns"
+
+    # Unmount the disk image
+    hdiutil detach $DEV
+
+    # Convert the disk image to read-only
+    rm -rf "$DMGFILE"
+    hdiutil convert "$DMGTMP" -format UDZO -o "$DMGFILE"
+    rm -rf "$TMPDIR"
+}
+
+# Create one installer per architecture.
+for a in ${ARCHITECTURES[*]}; do
+    build_dmg $a
 done
-chmod 755 "$APPTRANS"
-chmod 644 "$APPTRANS"/*
-
-# Declare the translation directory in qt.conf.
-# The file qt.conf shall have been created by macdeployqt.
-QTCONF="$VOLAPP/Contents/Resources/qt.conf"
-[[ -e "$QTCONF" ]] || error "$QTCONF not found"
-echo "Translations = Resources/translations" >>"$QTCONF"
-
-# Create a symbolic link to /Applications to facilitate the drag & drop.
-ln -sf /Applications "$VOLROOT/Applications"
-
-# Add a drive icon
-cp "$ROOTDIR/images/linguist-drive.icns" "$VOLROOT/.VolumeIcon.icns"
-SetFile -c icnC "$VOLROOT/.VolumeIcon.icns"
-SetFile -a C "$VOLROOT"
-
-# Format the appearance of the DMG in Finder when opened.
-mkdir -p "$VOLROOT/.background"
-cp $ROOTDIR/images/dmg-background.png "$VOLROOT/.background/background.png"
-echo '
-   tell application "Finder"
-     tell disk "'${VOLUME}'"
-           open
-           set current view of container window to icon view
-           set toolbar visible of container window to false
-           set statusbar visible of container window to false
-           set the bounds of container window to {400, 100, 900, 450}
-           set theViewOptions to the icon view options of container window
-           set arrangement of theViewOptions to not arranged
-           set icon size of theViewOptions to 128
-           set background picture of theViewOptions to file ".background:background.png"
-           set position of item "Qt Linguist" of container window to {100, 100}
-           set position of item "Applications" of container window to {375, 100}
-           update without registering applications
-           delay 5
-           close
-     end tell
-   end tell
-' | osascript
-
-# Unmount the disk image
-hdiutil detach $DEV
-
-# Convert the disk image to read-only
-rm -rf "$DMGFILE"
-hdiutil convert "$DMGTMP" -format UDZO -o "$DMGFILE"
-rm -rf "$TMPDIR"
-
-# Export the binaries to a shared environment, if it exists.
-# Define the environment variable DELIVERY to point to the shared export.
-# Default value:
-DELIVERY_DIR=${DELIVERY:-$HOME/devel}/qtlinguist-installers/installers
-[[ -d "$DELIVERY_DIR" ]] && cp -v "$DMGFILE" "$DELIVERY_DIR"
