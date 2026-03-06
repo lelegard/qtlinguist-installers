@@ -59,13 +59,3 @@ Most Linux distros provide a segmented installation of the Qt environment,
 many small packages with dependency management, instead of a huge
 global Qt installer. In this context, installing Qt Linguist only is
 probably already available.
-
-## Project status
-
-When the `qtlinguist-installers` project was created, the Qt project did not provide any
-standalone installer for Qt Linguist. Since then, a Windows installer is
-[available here](https://github.com/lelegard/qtlinguist-installers/releases).
-
-This new situation make the `qtlinguist-installers` project less necessary.
-The scripts in this project will remain available but no new binary package
-will be provided in the _Releases_ area of this project.

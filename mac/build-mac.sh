@@ -41,6 +41,7 @@ DMGSIZE=128m
 # Required Qt plugins and translations.
 PLUGINS=(iconengines imageformats networkinformation platforms sqldrivers styles tls)
 TRANSLATIONS=(linguist assistant qt qt_help qtbase qtmultimedia)
+DOCS=(qtlinguist qtassistant)
 
 # Various directories in this project.
 SCRIPTDIR=$(cd $(dirname $BASH_SOURCE); pwd)
@@ -62,12 +63,13 @@ LIPO=$(find_xcode_tool lipo)
 OTOOL=$(find_xcode_tool otool)
 
 # On macOS, Qt is installed in user's account.
-QMAKE=$(find $HOME/[Qq]* -type f -perm +0100 -name qmake 2>/dev/null | sort | tail -1)
-[[ -z "$QMAKE" ]] && error "no Qt installation found in $HOME"
-QTBINDIR=$(dirname "$QMAKE")
+# Search for a Linguist.app directory in a path containing a version number.
+LINGDIR=$(find $HOME/[Qq]* -type d -name Linguist.app 2>/dev/null | grep '[0-9]\.[0-9]' | sort | tail -1)
+[[ -z "$LINGDIR" ]] && error "no Qt installation found in $HOME"
+LINGUIST="$LINGDIR/Contents/MacOS/Linguist"
+[[ -x "$LINGUIST" ]] || error "Linguist not found in $LINGDIR"
+QTBINDIR=$(dirname "$LINGDIR")
 QTDIR=$(dirname "$QTBINDIR")
-LINGUIST="$QTBINDIR/Linguist.app/Contents/MacOS/Linguist"
-[[ -x "$LINGUIST" ]] || error "Linguist not found in $QTDIR"
 
 # Supported architectures for Linguist.
 ARCHITECTURES=($("$LIPO" -archs "$LINGUIST"))
@@ -76,8 +78,19 @@ ARCHITECTURES=($("$LIPO" -archs "$LINGUIST"))
 VERSION=$(tr <<<$QTBINDIR / '\n'  | grep -e '^[Qq][Tt][0-9][0-9\.-]*$' -e '^[0-9][0-9\.-]*$' | sed -e 's/^[Qq][Tt]//' | head -1)
 [[ -z "$VERSION" ]] && error "Qt version not found from $QTBINDIR"
 
-echo "Qt root: $QTDIR"
+# Get documentation directory. Unfortunately, it is not defined in the same tree as the rest.
+# Find the location in the configuration file of Qt Assistant.
+ASSCONF="$QTBINDIR/Assistant.app/Contents/Resources/qt.conf"
+[[ -e "$ASSCONF" ]] || error "not found: $ASSCONF"
+QTDOCDIR=$(sed -e '/Documentation=/!d' -e 's/.*Documentation= *//' -e 's/ *$//' "$ASSCONF" | tail -1)
+[[ -z "$QTDOCDIR" ]] && error "no 'Documentation' field in $ASSCONF"
+QTDOCDIR="$QTDIR/$QTDOCDIR"
+[[ -d "$QTDOCDIR" ]] || error "doc directory not found: $QTDOCDIR"
+QTDOCDIR=$(cd "$QTDOCDIR"; pwd)
+
 echo "Qt version: $VERSION"
+echo "Qt root: $QTDIR"
+echo "Qt docs: $QTDOCDIR"
 
 # Set an icon to a file or folder.
 # Syntax: set_icon icon-file destination-file
@@ -112,12 +125,16 @@ set_icon() {
 }
 
 # Strip a universal binary. Keep only one architecture.
-# Syntax: remove_other_arch arch file
+# Syntax: remove_other_arch arch file...
 remove_other_arch() {
     local arch="$1"
-    local file="$2"
-    for a in $("$LIPO" -archs "$file" 2>/dev/null); do
-        [[ $a != $arch ]] && "$LIPO" -remove $a "$file" -output "$file"
+    shift
+    for file in "$@"; do
+        for a in $("$LIPO" -archs "$file" 2>/dev/null); do
+            if [[ $a != $arch ]]; then
+                "$LIPO" -remove $a "$file" -output "$file"
+            fi
+        done
     done
 }
 
@@ -171,7 +188,7 @@ build_dmg() {
     DEV=$(echo $DEVS | cut -f 1 -d ' ')
 
     # Build a custom bundle with a subset of Qt structure in Resources.
-    mkdir -p "$DESTAPP/Contents/MacOS" "$DESTRES/bin" "$DESTRES/lib" "$DESTRES/plugins" "$DESTRES/translations"
+    mkdir -p "$DESTAPP/Contents/MacOS" "$DESTRES/bin" "$DESTRES/lib" "$DESTRES/plugins" "$DESTRES/translations" "$DESTRES/docs"
 
     # Copy application bundles.
     cp -r "$QTBINDIR/Linguist.app" "$QTBINDIR/Assistant.app" "$DESTRES/bin"
@@ -181,23 +198,38 @@ build_dmg() {
     done
 
     # Copy plugins.
-    for pl in ${PLUGINS[*]}; do
-        cp -r "$QTDIR/plugins/$pl" "$DESTRES/plugins/$pl"
+    for f in ${PLUGINS[*]}; do
+        cp -r "$QTDIR/plugins/$f" "$DESTRES/plugins/$f"
     done
 
     # Copy translation files.
-    for app in ${TRANSLATIONS[*]}; do
-        cp "$QTDIR/translations/"${app}_*.qm "$DESTRES/translations"
+    for f in ${TRANSLATIONS[*]}; do
+        cp "$QTDIR/translations/"${f}_*.qm "$DESTRES/translations"
     done
 
-    # Adjust architecture on shared libraries.
-    for file in $(find "$DESTAPP" -name '*.dylib'); do
+    # Copy documentation files.
+    for f in ${DOCS[*]}; do
+        cp "$QTDOCDIR/$f.qch" "$DESTRES/docs"
+    done
+
+    # Adjust architecture on shared libraries. Take care of spaces in file paths.
+    find "$DESTAPP" -name '*.dylib' | while IFS= read file; do
         remove_other_arch $ARCH "$file"
     done
- 
+
+    # Adjust configuration to documentation files.
+    QTCONF="$DESTRES/bin/Assistant.app/Contents/Resources/qt.conf"
+    sed -e 's/Documentation=.*/Documentation=docs/' "$QTCONF" >"$QTCONF.new"
+    mv "$QTCONF.new" "$QTCONF"
+
     # Adjust protections.
     find "$DESTAPP" \( -type d -o -name '*.dylib' \) -exec chmod 755 {} \;
-    find "$DESTAPP" -name '*.qm' -exec chmod 644 {} \;
+    find "$DESTAPP" \( -name '*.qm' -o -name '*.qch' -o -name '*.conf' \) -exec chmod 644 {} \;
+
+    # Cleanup Apple attributes. So far, com.apple.provenance cannot be deleted from userspace because of SIP.
+    for attr in com.apple.provenance com.apple.quarantine; do
+        xattr -dr $attr "$VOLROOT"
+    done
 
     # The global app is a script running Linguist.
     APPSCRIPT="$DESTAPP/Contents/MacOS/$DESTNAME"
@@ -205,6 +237,22 @@ build_dmg() {
     echo 'dir=$(dirname "$0")' >>"$APPSCRIPT"
     echo 'exec "$dir/../Resources/bin/Linguist.app/Contents/MacOS/Linguist"' >>"$APPSCRIPT"
     chmod 755 "$APPSCRIPT"
+
+    # The Finder cannot determine the architecture from a shell script.
+    # On arm64 system, it requires Rosetta to be installed, even if the application is fully arm64.
+    # Force the architecture so that the Finder stops asking.
+    cat >"$DESTAPP/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+<key>LSArchitecturePriority</key>
+<array>
+<string>$ARCH</string>
+</array>
+</dict>
+</plist>
+EOF
 
     # Set the icon for the outer Linguist bundle.
     set_icon "$QTBINDIR/Linguist.app/Contents/Resources/linguist.icns" "$DESTAPP"
@@ -231,7 +279,7 @@ build_dmg() {
                set position of item "Qt Linguist" of container window to {100, 100}
                set position of item "Applications" of container window to {375, 100}
                update without registering applications
-               delay 5
+               delay 3
                close
          end tell
        end tell
