@@ -1,28 +1,31 @@
-## Build scripts for Windows
+# Build scripts for Windows
 
-### Prerequisites
+## Prerequisites
 
-Install ["Qt for Open Source Use"](https://www.qt.io/development/download-qt-installer-oss) for Windows with MinGW environment.
+Install ["Qt for Open Source Use"](https://www.qt.io/development/download-qt-installer-oss)
+for Windows with MinGW environment.
 
 On Intel systems (x86 and x64), do not forget to select the Qt components for the latest version of MinGW.
 In the list of components, select Qt -> Qt-with-latest-version -> MinGW-with-latest-version.
 If you want to develop with Qt on Windows, also select Build Tools -> MinGW-with-latest-version.
 
-### Files
+Install NSIS (Nullsoft Scriptable Installation System) using command `winget install nsis`.
 
-- build-windows.ps1 : PowerShell script to build the installer.
-- qtlinguist.nsi : NSIS (Nullsoft Scriptable Installation System) script.
+## Files
 
-### Building the Qt Linguist installers
+- `build-windows.ps1` : PowerShell script to build the installer.
+- `qtlinguist.nsi` : NSIS (Nullsoft Scriptable Installation System) script.
+
+## Building the Qt Linguist installers
 
 Execute the script `build-windows.ps1` from PowerShell.
 
-#### Syntax:
+### Syntax:
 ```
 build-windows.ps1 [[-QtRoot] <String>] [[-Version] <String>] [-NoPause]
 ```
 
-#### Parameters:
+### Parameters:
 ```
 -QtRoot <String>
 ```
@@ -42,7 +45,7 @@ Do not wait for the user to press <enter> at end of execution. By default,
 execute a "pause" instruction at the end of execution, which is useful
 when the script was run from Windows Explorer.
 
-### Using the installers
+## Using the installers
 
 The script generates two installers, a classical one and a standalone / portable one.
 

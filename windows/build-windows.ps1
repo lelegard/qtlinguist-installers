@@ -175,9 +175,9 @@ function New-ZipFile
 
 # Get the project directories.
 
-$RootDir = (Split-Path -Parent $PSScriptRoot)
-$InstallerDir = (Join-Path $RootDir "installers")
-$TempDir = (Join-Path $PSScriptRoot "tmp")
+$RootDir      = (Split-Path -Parent $PSScriptRoot)
+$InstallerDir = "$RootDir\installers"
+$TempDir      = "$PSScriptRoot\tmp"
 
 # Locate NSIS, the Nullsoft Scriptable Installation System.
 
@@ -227,18 +227,18 @@ function Get-QtBinDir ($root)
     if (Test-Path $root -PathType Container) {
 
         # Check existence of executables in root directory.
-        if (Test-Path (Join-Path $root linguist.exe)) {
-            $script:LinguistExe = (Join-Path $root linguist.exe)
+        if (Test-Path $root\linguist.exe) {
+            $script:LinguistExe = "$root\linguist.exe"
         }
-        if (Test-Path (Join-Path $root gcc.exe)) {
-            $script:GccExe = (Join-Path $root gcc.exe)
+        if (Test-Path $root\gcc.exe) {
+            $script:GccExe = "$root\gcc.exe"
         }
 
         # Process each subdirectory in alphabetical order.
         foreach ($subdir in @(Get-ChildItem -Path $root -Directory | Sort-Object)) {
             # Recurse if subdirectory name not in skip list.
             if ($subdir -notin $QtSkipDirectories) {
-                Get-QtBinDir (Join-Path $root $subdir)
+                Get-QtBinDir "$root\$subdir"
             }
         }
     }
@@ -280,13 +280,27 @@ $WinDeployExe = (Search-File "windeployqt.exe" $QtBinDir)
 $TranslationsDir = (Search-File "translations" (Split-Path -Parent $QtBinDir))
 Write-Output "Translations path is $TranslationsDir"
 
+# Get directory of documentation files in the Qt environment.
+
+$QtDocDir = (Select-String 'Documentation=' $QtBinDir\qt.conf | Select-Object -Last 1) -ireplace '.*Documentation=',''
+$QtPrefix = (Select-String 'Prefix=' $QtBinDir\qt.conf | Select-Object -Last 1) -ireplace '.*Prefix=',''
+if (-not $QtDocDir) {
+    Exit-Script "Documentation directory not found in $QtBinDir\qt.conf"
+}
+$QtDocDir = "$QtBinDir\$QtPrefix\$QtDocDir"
+if (-not (Test-Path -PathType Container $QtDocDir)) {
+    Exit-Script "Documentation directory not found: $QtDocDir"
+}
+$QtDocDir = Resolve-Path $QtDocDir
+Write-Output "Documentation path is $QtDocDir"
+
 # Define a clean and safe path: Qt, GCC and Windows only.
 
 if ($NeedGcc) {
-    $env:Path = $QtBinDir + ";" + (Split-Path -Parent $GccExe) + ";" + (Join-Path $env:SystemRoot System32) + ";" + $env:SystemRoot
+    $env:Path = $QtBinDir + ";" + (Split-Path -Parent $GccExe) + ";" + $env:SystemRoot + "\System32;" + $env:SystemRoot
 }
 else {
-    $env:Path = $QtBinDir + ";" + (Join-Path $env:SystemRoot System32) + ";" + $env:SystemRoot
+    $env:Path = $QtBinDir + ";" + $env:SystemRoot + "\System32;" + $env:SystemRoot
 }
 
 # If Qt version was not specified in command line, try to get it from the linguist path.
@@ -318,7 +332,7 @@ $VcredistExe = ""
 $VcredistDir = ""
 $path = $LinguistExe
 while (!$VcredistDir -and $path -ne "") {
-    $vc = (Join-Path $path vcredist)
+    $vc = "$path\vcredist"
     if (Test-Path -PathType Container $vc) {
         $VcredistDir = $vc
     }
@@ -352,30 +366,41 @@ if (Test-Path $TempDir) {
 # The rest of the script is in a try block to ensure the cleanup of the temporary directory.
 
 try {
-    $TempRootDir = (Join-Path $TempDir "QtLinguist")
+    $TempRootDir  = "$TempDir\QtLinguist"
+    $TempBinDir   = "$TempRootDir\bin"
+    $TempTransDir = "$TempBinDir\translations"
+    $TempDocDir   = "$TempRootDir\docs"
     [void] (New-Item -ItemType Directory -Force $TempRootDir)
-    $TempBinDir = (Join-Path $TempRootDir "bin")
     [void] (New-Item -ItemType Directory -Force $TempBinDir)
-    $TempTransDir = (Join-Path $TempBinDir "translations")
     [void] (New-Item -ItemType Directory -Force $TempTransDir)
+    [void] (New-Item -ItemType Directory -Force $TempDocDir)
 
     # Copy Linguist in temporary directory.
     Copy-Item $LinguistExe $TempBinDir
 
-    # "Deploy" dependent modules.
-    & $WinDeployExe $TempBinDir --release --no-quick-import --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --no-ffmpeg
-
     # Copy additional executables.
-    Copy-Item (Join-Path $QtBinDir lconvert.exe) $TempBinDir
-    Copy-Item (Join-Path $QtBinDir lrelease.exe) $TempBinDir
-    Copy-Item (Join-Path $QtBinDir lupdate.exe) $TempBinDir
+    Copy-Item $QtBinDir\assistant.exe $TempBinDir
+    Copy-Item $QtBinDir\lconvert.exe  $TempBinDir
+    Copy-Item $QtBinDir\lrelease.exe  $TempBinDir
+    Copy-Item $QtBinDir\lupdate.exe   $TempBinDir
+
+    # Build Qt configuration file.
+    @("[Paths]", "Documentation=docs", "Prefix=..") | Out-File -Encoding ascii -FilePath $TempBinDir\qt.conf
+
+    # "Deploy" dependent modules for Qt GUI applications.
+    & $WinDeployExe $TempBinDir\assistant.exe --release --no-quick-import --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --no-ffmpeg
+    & $WinDeployExe $TempBinDir\linguist.exe  --release --no-quick-import --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --no-ffmpeg
 
     # Copy translation files.
-    Copy-Item (Join-Path $TranslationsDir "linguist_*.qm") $TempTransDir
-    Copy-Item (Join-Path $TranslationsDir "assistant_*.qm") $TempTransDir
-    Copy-Item (Join-Path $TranslationsDir "qt_*.qm") $TempTransDir
-    Copy-Item (Join-Path $TranslationsDir "qtbase_*.qm") $TempTransDir
-    Copy-Item (Join-Path $TranslationsDir "qtmultimedia_*.qm") $TempTransDir
+    Copy-Item $TranslationsDir\linguist_*.qm     $TempTransDir
+    Copy-Item $TranslationsDir\assistant_*.qm    $TempTransDir
+    Copy-Item $TranslationsDir\qt_*.qm           $TempTransDir
+    Copy-Item $TranslationsDir\qtbase_*.qm       $TempTransDir
+    Copy-Item $TranslationsDir\qtmultimedia_*.qm $TempTransDir
+
+    # Copy documentation files.
+    Copy-Item $QtDocDir\qtassistant.qch $TempDocDir
+    Copy-Item $QtDocDir\qtlinguist.qch  $TempDocDir
 
     # Build the installer.
     & $NsisExe `
@@ -383,18 +408,19 @@ try {
         "/DProductVersionInfo=$VersionInfo" `
         "/DRootDir=$RootDir" `
         "/DBinDir=$TempBinDir" `
+        "/DDocDir=$TempDocDir" `
         "/D$InstallerArch" `
         "/DVcredistExe=$VcredistExe" `
         "/DVcredistName=$VcredistName" `
         "$($NsisScript)"
 
     # Copy VC++ redistributable libraries.
-    $TempRedistDir = (Join-Path $TempRootDir "vcredist")
+    $TempRedistDir = "$TempRootDir\vcredist"
     [void] (New-Item -ItemType Directory -Force $TempRedistDir)
     Copy-Item $VcredistExe $TempRedistDir
 
     # Build standalone installer.
-    $ZipInstaller = (Join-Path $InstallerDir "QtLinguist-${InstallerArch}-Standalone-${Version}.zip")
+    $ZipInstaller = "${InstallerDir}\QtLinguist-${InstallerArch}-Standalone-${Version}.zip"
     Get-ChildItem -Recurse $TempRootDir | New-ZipFile $ZipInstaller -Force -Root $TempDir
 }
 finally {

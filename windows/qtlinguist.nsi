@@ -37,6 +37,9 @@ Caption "Qt Linguist Installer"
 !verbose push
 !verbose 0
 !include "MUI2.nsh"
+!include "Sections.nsh"
+!include "TextFunc.nsh"
+!include "FileFunc.nsh"
 !include "WinMessages.nsh"
 !include "x64.nsh"
 !verbose pop
@@ -230,21 +233,21 @@ Section "Install"
 
     ; Cleanup previous install.
     RMDir /r "$INSTDIR\bin"
+    RMDir /r "$INSTDIR\docs"
     RMDir /r "$INSTDIR\translations"
     RMDir /r "$INSTDIR\vcredist"
 
     ; Install product files.
     SetOutPath "$INSTDIR\bin"
     File /r "${BinDir}\*"
+    SetOutPath "$INSTDIR\docs"
+    File /r "${DocDir}\*"
 
     ; Create a shortcut in start menu.
     CreateShortCut "$SMPROGRAMS\Qt Linguist.lnk" "$INSTDIR\bin\linguist.exe"
 
     ; Store installation folder in registry.
     WriteRegStr HKLM "${ProductKey}" "InstallDir" $INSTDIR
-
-    ; Create uninstaller
-    WriteUninstaller "$INSTDIR\QtLinguistUninstall.exe"
 
     ; Install 'vcredist' (Visual C++ Redistributable) if available.
     !if "${VcredistExe}" != ""
@@ -253,11 +256,20 @@ Section "Install"
         ExecWait '"$INSTDIR\vcredist\${VcredistName}" /install /quiet /norestart'
     !endif
 
+    ; Create uninstaller
+    WriteUninstaller "$INSTDIR\QtLinguistUninstall.exe"
+
     ; Declare uninstaller in "Add/Remove Software" control panel
     WriteRegStr HKLM "${UninstallKey}" "DisplayName" "Qt Linguist"
+    WriteRegStr HKLM "${UninstallKey}" "Publisher" "The Qt Company Ltd."
     WriteRegStr HKLM "${UninstallKey}" "DisplayVersion" "${ProductVersion}"
     WriteRegStr HKLM "${UninstallKey}" "DisplayIcon" "$INSTDIR\QtLinguistUninstall.exe"
     WriteRegStr HKLM "${UninstallKey}" "UninstallString" "$INSTDIR\QtLinguistUninstall.exe"
+
+    ; Get estimated size of installed files
+    ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
+    IntFmt $0 "0x%08X" $0
+    WriteRegDWORD HKLM "${UninstallKey}" "EstimatedSize" "$0"
 
 SectionEnd
 
@@ -270,12 +282,16 @@ Section "Uninstall"
     ; Work on "all users" context, not current user.
     SetShellVarContext all
 
+    ; Get installation folder from registry
+    ReadRegStr $0 HKLM "${ProductKey}" "InstallDir"
+
     ; Delete product files.
-    RMDir /r "$INSTDIR\bin"
-    RMDir /r "$INSTDIR\translations"
-    RMDir /r "$INSTDIR\vcredist"
-    Delete "$INSTDIR\QtLinguistUninstall.exe"
-    RMDir "$INSTDIR"
+    RMDir /r "$0\bin"
+    RMDir /r "$0\docs"
+    RMDir /r "$0\translations"
+    RMDir /r "$0\vcredist"
+    Delete "$0\QtLinguistUninstall.exe"
+    RMDir "$0"
 
     ; Delete start menu entries  
     Delete "$SMPROGRAMS\Qt Linguist.lnk"

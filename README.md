@@ -6,19 +6,26 @@
 Qt applications are easily translatable. Developers typically write their
 applications in English but all strings which are visible to the end-user
 can be automatically grabbed and stored in *translation files* with
-suffix `.ts`. See more details [here](http://doc.qt.io/qt-5/internationalization.html).
+suffix `.ts`. See more details [here](https://doc.qt.io/qt-6/internationalization.html).
 
 The translation files are then passed to various *translators* who are fluent
 in the target languages. Using a user-friendly tool, *Qt Linguist*, the translators
 produce the translations from the English strings in their native language.
 
 The tool Qt Linguist is installed with the complete Qt development environment.
-The binary installer for this environment is 1 GB big and a typical installation
-uses 4 GB of disk space.
+For open-source developers, install
+["Qt for Open Source Use"](https://www.qt.io/development/download-qt-installer-oss)
+for the appropriate operating system, macOS, Windows or Linux, on 64-bit Intel
+or Arm64 systems.
+
+This is an "online" installer which requires the registration to a free account on
+[qt.io](https://www.qt.io/). After installation, the Qt development environment uses
+several gigabytes of disk space, depending on the installed options and operating
+system.
 
 This is acceptable for developers. But translators are not developers. They may even
 have no technical skill at all. The only tool they need from the rich Qt environment
-is Linguist. Asking them to download and install 1 GB of Qt SDK is not acceptable for
+is Linguist. Asking them to download and install gigabytes of Qt SDK is not acceptable for
 most of them.
 
 So, having a solution to download and install Qt Linguist only is a legitimate
@@ -46,9 +53,9 @@ deliver these installers to the translators.
 Alternatively, if you trust the author of this project, you may directly download
 binary installers from the [project releases](https://github.com/lelegard/qtlinguist-installers/releases).
 
-As an example, a standalone binary installer for Qt Linguist on Windows is 17 MB
-big and uses 33 MB of disk space after installation. Compare this to 1 GB of
-installer and 4 GB of disk space for the complete Qt environment.
+As an example, a standalone binary installer for Qt Linguist is 20 to 40 MB, depending
+on the operating system, and uses 50 to 80 MB of disk space after installation.
+Compare this to 4 GB of disk space for the complete Qt environment.
 
 ## Target environments
 

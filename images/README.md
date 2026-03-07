@@ -1,4 +1,4 @@
-## Qt Linguist images
+# Qt Linguist images
 
 Official Qt Linguist icons from:
 
